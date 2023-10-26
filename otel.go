@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel"
-	//"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
+	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	"go.opentelemetry.io/otel/propagation"
-	//"go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
@@ -54,6 +54,15 @@ func setupOTelSDK(
 	shutdownFuncs = append(shutdownFuncs, tracerProvider.Shutdown)
 	otel.SetTracerProvider(tracerProvider)
 
+	// set up the meter provider
+	meterProvider, err := newMeterProvider(res)
+	if err != nil {
+		handleErr(err)
+		return
+	}
+	shutdownFuncs = append(shutdownFuncs, meterProvider.Shutdown)
+	otel.SetMeterProvider(meterProvider)
+
 	return
 }
 
@@ -86,12 +95,33 @@ func newTracerProvider(res *resource.Resource) (*trace.TracerProvider, error) {
 	}
 
 	provider := trace.NewTracerProvider(
+		trace.WithResource(res),
 		trace.WithBatcher(
 			exporter,
-			// Default is 5sec, set to 1sec for the demonstration
+			// Default is 5s, set to 1s for the demonstration
 			trace.WithBatchTimeout(time.Second),
 		),
-		trace.WithResource(res),
+	)
+	return provider, nil
+}
+
+func newMeterProvider(res *resource.Resource) (*metric.MeterProvider, error) {
+	exporter, err := stdoutmetric.New(
+		stdoutmetric.WithPrettyPrint(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	provider := metric.NewMeterProvider(
+		metric.WithResource(res),
+		metric.WithReader(
+			metric.NewPeriodicReader(
+				exporter,
+				// Default is 1m, set to 3s for the demonstration
+				metric.WithInterval(3 * time.Second),
+			),
+		),
 	)
 	return provider, nil
 }
