@@ -1,4 +1,4 @@
-module dice
+module dice-go
 
 go 1.21.0
 
