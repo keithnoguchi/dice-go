@@ -5,10 +5,10 @@ import (
 	"errors"
 	//"time"
 
-	//"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel"
 	//"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
 	//"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
-	//"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/propagation"
 	//"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	//"go.opentelemetry.io/otel/sdk/trace"
@@ -34,12 +34,16 @@ func setupOTelSDK(
 		err = errors.Join(inErr, shutdown(ctx))
 	}
 
-	// setup resource
+	// set up resource
 	_, err = newResource(serviceName, serviceVersion)
 	if err != nil {
 		handleErr(err)
 		return
 	}
+
+	// set up propagator
+	prop := newPropagator()
+	otel.SetTextMapPropagator(prop)
 
 	return
 }
@@ -54,5 +58,12 @@ func newResource(
 			semconv.ServiceName(serviceName),
 			semconv.ServiceVersion(serviceVersion),
 		),
+	)
+}
+
+func newPropagator() propagation.TextMapPropagator {
+	return propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
 	)
 }
