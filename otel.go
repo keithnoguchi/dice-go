@@ -3,15 +3,15 @@ package main
 import (
 	"context"
 	"errors"
-	//"time"
+	"time"
 
 	"go.opentelemetry.io/otel"
 	//"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
-	//"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
+	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	"go.opentelemetry.io/otel/propagation"
 	//"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
-	//"go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 )
 
@@ -35,7 +35,7 @@ func setupOTelSDK(
 	}
 
 	// set up resource
-	_, err = newResource(serviceName, serviceVersion)
+	res, err := newResource(serviceName, serviceVersion)
 	if err != nil {
 		handleErr(err)
 		return
@@ -44,6 +44,15 @@ func setupOTelSDK(
 	// set up propagator
 	prop := newPropagator()
 	otel.SetTextMapPropagator(prop)
+
+	// set up the tracer provider
+	tracerProvider, err := newTracerProvider(res)
+	if err != nil {
+		handleErr(err)
+		return
+	}
+	shutdownFuncs = append(shutdownFuncs, tracerProvider.Shutdown)
+	otel.SetTracerProvider(tracerProvider)
 
 	return
 }
@@ -66,4 +75,23 @@ func newPropagator() propagation.TextMapPropagator {
 		propagation.TraceContext{},
 		propagation.Baggage{},
 	)
+}
+
+func newTracerProvider(res *resource.Resource) (*trace.TracerProvider, error) {
+	exporter, err := stdouttrace.New(
+		stdouttrace.WithPrettyPrint(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	provider := trace.NewTracerProvider(
+		trace.WithBatcher(
+			exporter,
+			// Default is 5sec, set to 1sec for the demonstration
+			trace.WithBatchTimeout(time.Second),
+		),
+		trace.WithResource(res),
+	)
+	return provider, nil
 }
